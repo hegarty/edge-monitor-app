@@ -41,7 +41,7 @@ edge-monitor-app contains:
 - Golang applications
 - Application-level probing logic
 - Dockerfiles
-- Makefile or build.sh scripts
+- Makefiles (one per service)
 - Container build logic
 - Prometheus metric exposure
 
@@ -62,43 +62,44 @@ Do not introduce infrastructure code into this repository.
 
 # Application Strategy
 
-This repository will contain multiple independent monitoring services, each compiled as a separate binary.
+This repository contains multiple independent monitoring services, each compiled as a separate binary.
 
-Recommended structure:
+Repository structure:
 
 ```
-/cmd
-  /wifi-probe
-  /dns-probe
-  /jitter-probe
-  /gateway-monitor
+/wifi-probe       — TCP and HTTP reachability prober (:9090)
+/dns-probe        — DNS resolution prober (:9091)
+/jitter-probe     — High-frequency latency and jitter sampler (:9092)
+/gateway-monitor  — LAN vs WAN failure domain isolator (:9093)
 ```
 
 Each service:
 
-- Is an independent Go binary.
-- Exposes Prometheus metrics.
+- Is an independent Go module and binary.
+- Has its own Makefile, Dockerfile, go.mod, and go.sum.
+- Exposes Prometheus metrics on a dedicated port.
+- Uses structured JSON logging via `log/slog` (Go stdlib).
 - Logs to stdout only.
-- Has its own Dockerfile (or shared multi-target build).
 - Is deployable independently in Kubernetes.
+- Supports multi-arch builds (linux/amd64 and linux/arm64).
 
 Do not merge services into a monolithic application.
 
 ---
 
-# Applications to Build
+# Implemented Services
 
-Claude should implement the following services.
+All services are implemented and verified.
 
 ---
 
-## 1. wifi-probe
+## 1. wifi-probe (port 9090)
 
 Purpose:
 Detect basic TCP and HTTP reachability failures.
 
 Behavior:
-- Probe TCP targets.
+- Probe TCP targets (tries ports 443, 80).
 - Probe HTTP targets.
 - Measure latency.
 - Detect connection failures.
@@ -111,13 +112,13 @@ Metrics:
 
 ---
 
-## 2. dns-probe
+## 2. dns-probe (port 9091)
 
 Purpose:
 Detect DNS resolution failures and latency spikes.
 
 Behavior:
-- Resolve configurable domains repeatedly.
+- Resolve configurable domains repeatedly using Go stdlib net.Resolver.
 - Measure lookup latency.
 - Track timeout events.
 
@@ -130,16 +131,17 @@ This helps identify DNS-related micro-outages.
 
 ---
 
-## 3. jitter-probe
+## 3. jitter-probe (port 9092)
 
 Purpose:
 Detect short (1–3 second) latency spikes and packet loss bursts.
 
 Behavior:
-- High-frequency TCP or ICMP sampling (250–500ms recommended).
-- Track rolling latency.
-- Track packet loss bursts.
+- High-frequency TCP sampling (default 500ms interval).
+- Track rolling latency via bounded ring buffer sliding window.
+- Track packet loss bursts (2+ consecutive failures).
 - Calculate jitter (std deviation over sliding window).
+- Calculate p95 and p99 latency percentiles.
 
 Metrics:
 - network_latency_ms
@@ -153,26 +155,26 @@ This is critical for detecting WiFi RF instability and bufferbloat.
 
 ---
 
-## 4. gateway-monitor
+## 4. gateway-monitor (port 9093)
 
 Purpose:
 Isolate failure domain.
 
 Behavior:
-Continuously probe:
+Continuously probe via TCP:
 - Router IP (e.g., 192.168.1.1)
 - External IP (e.g., 1.1.1.1)
 
-Compare reachability to determine:
+Compare reachability to determine failure domain on state transitions:
 
-- LAN instability
-- WAN instability
-- Full network interruption
+- LAN instability (gateway down, WAN up)
+- WAN instability (gateway up, WAN down)
+- Full network interruption (both down)
 
 Metrics:
 - gateway_reachable
 - wan_reachable
-- failure_domain_events_total
+- failure_domain_events_total (labels: domain=lan|wan|full)
 
 ---
 
@@ -180,10 +182,10 @@ Metrics:
 
 To detect 1–3 second drops:
 
-- Default INTERVAL_SECONDS of 5 is insufficient.
-- jitter-probe should support sub-second sampling.
+- Default INTERVAL_SECONDS is 2 for all probes (5 is insufficient).
+- jitter-probe uses SAMPLE_INTERVAL_MS (default 500) for sub-second sampling.
 - Sampling interval must be configurable via environment variable.
-- Sliding window calculations preferred over single-sample logic.
+- jitter-probe uses a bounded ring buffer sliding window for calculations.
 
 Changes that reduce short-drop detection sensitivity are not acceptable without explicit instruction.
 
@@ -191,36 +193,33 @@ Changes that reduce short-drop detection sensitivity are not acceptable without 
 
 # Makefile as Deployment Guide
 
-The Makefile (or build.sh) is the canonical interface for:
+Each service has its own Makefile in its directory. The Makefile is the canonical interface for:
 
 - Running locally
-- Building binaries
-- Building Docker images
+- Building binaries (host OS/arch and cross-compile)
+- Building Docker images (multi-arch)
 - Importing images into k3d
 
 Claude must:
 
-- Keep Makefile clean and declarative.
-- Avoid embedding business logic in Makefile.
+- Keep Makefiles clean and declarative.
+- Avoid embedding business logic in Makefiles.
 - Use Makefile targets as the standard deployment interface.
 
-Typical targets:
+Standard targets (run from within each service directory):
 
 ```bash
-make run
-make build-bin
-make build-image
-make push-k3d
-make clean
-```
-
-If multiple apps exist, support:
-
-```bash
-make build APP=wifi-probe
-make build APP=dns-probe
-make build APP=jitter-probe
-make build APP=gateway-monitor
+make run                # Run locally with default env vars
+make build-bin          # Build binary for host OS/arch
+make build-linux-amd64  # Cross-compile for linux/amd64
+make build-linux-arm64  # Cross-compile for linux/arm64
+make build-all          # Build both linux/amd64 and linux/arm64
+make build-image        # Build Docker image for host arch
+make build-image-amd64  # Build Docker image for linux/amd64
+make build-image-arm64  # Build Docker image for linux/arm64
+make build-image-all    # Build Docker images for both architectures
+make push-k3d           # Import image into k3d cluster
+make clean              # Remove built binaries
 ```
 
 The Makefile should guide deployment, not replace Kubernetes configuration.
@@ -231,17 +230,16 @@ The Makefile should guide deployment, not replace Kubernetes configuration.
 
 All configuration must be environment-driven.
 
-Examples:
-
-| Variable | Description |
-|----------|------------|
-| PING_TARGETS | TCP targets |
-| HTTP_TARGETS | HTTP targets |
-| DNS_TARGETS | Domains to resolve |
-| GATEWAY_IP | Router IP |
-| WAN_TARGET | External IP |
-| INTERVAL_SECONDS | Probe interval |
-| SAMPLE_INTERVAL_MS | High-frequency sampling interval |
+| Variable | Used by | Description | Default |
+|----------|---------|-------------|---------|
+| PING_TARGETS | wifi-probe, jitter-probe | TCP targets (comma-separated) | 192.168.1.1,1.1.1.1 |
+| HTTP_TARGETS | wifi-probe | HTTP targets (comma-separated) | https://ifconfig.me/ip |
+| DNS_TARGETS | dns-probe | Domains to resolve (comma-separated) | google.com,cloudflare.com |
+| GATEWAY_IP | gateway-monitor | Router IP | 192.168.1.1 |
+| WAN_TARGET | gateway-monitor | External IP | 1.1.1.1 |
+| INTERVAL_SECONDS | wifi-probe, dns-probe, gateway-monitor | Probe interval in seconds | 2 |
+| SAMPLE_INTERVAL_MS | jitter-probe | High-frequency sampling interval in ms | 500 |
+| WINDOW_SIZE | jitter-probe | Sliding window size for jitter/percentile | 60 |
 
 Do not hardcode configuration values.
 
@@ -263,18 +261,21 @@ Infrastructure lives in edge-monitor-infra.
 - Prefer Go standard library.
 - Avoid frameworks.
 - Avoid heavy external dependencies.
+- Only external dependency: github.com/prometheus/client_golang.
 
 ## 3. Resource Constraints
 
 - Avoid unbounded goroutines.
 - Avoid memory-heavy buffers.
+- Use bounded data structures (ring buffers, fixed-size windows).
 - Use bounded worker pools if concurrency is introduced.
 - Assume Raspberry Pi resource limits.
 
 ## 4. Logging
 
 - Log to stdout only.
-- Prefer structured JSON.
+- Use `log/slog` with `slog.NewJSONHandler` for structured JSON output.
+- Do not use `log.Println` or `fmt.Printf` for application logging.
 - Do not write to files.
 - Do not embed S3 upload logic.
 
@@ -283,6 +284,7 @@ Infrastructure lives in edge-monitor-infra.
 - Avoid high-cardinality labels.
 - Do not dynamically create unlimited label values.
 - Keep metric names stable.
+- Each service exposes metrics on its own port (9090–9093).
 
 ## 6. Error Handling
 
@@ -291,18 +293,32 @@ Infrastructure lives in edge-monitor-infra.
 - Log probe failures clearly.
 - Do not suppress repeated short drop events.
 
+## 7. Probing
+
+- Use TCP dial (net.DialTimeout) for network probing, not ICMP.
+- ICMP requires root/elevated privileges and is not suitable for unprivileged containers.
+
 ---
 
 # Observability Model
 
 Prometheus:
 
-- Scrapes each service’s /metrics endpoint.
+- Scrapes each service's /metrics endpoint.
 - Configuration lives in edge-monitor-infra.
+
+Service ports:
+
+| Service | Metrics Port |
+|---------|-------------|
+| wifi-probe | 9090 |
+| dns-probe | 9091 |
+| jitter-probe | 9092 |
+| gateway-monitor | 9093 |
 
 Logging:
 
-- Logs emitted to stdout.
+- Logs emitted to stdout as structured JSON.
 - Collected externally (Promtail, Fluent Bit, etc.).
 - Possibly shipped to S3.
 - Application does not directly manage log shipping.
