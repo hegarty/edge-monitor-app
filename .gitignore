@@ -28,3 +28,8 @@ go.work.sum
 .env
 
 hello-world
+
+# wifi-probe binaries
+wifi-probe/wifi-probe
+wifi-probe/wifi-probe-linux-amd64
+wifi-probe/wifi-probe-linux-arm64
