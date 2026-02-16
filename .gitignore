@@ -28,3 +28,23 @@ go.work.sum
 .env
 
 hello-world
+
+# wifi-probe binaries
+wifi-probe/wifi-probe
+wifi-probe/wifi-probe-linux-amd64
+wifi-probe/wifi-probe-linux-arm64
+
+# dns-probe binaries
+dns-probe/dns-probe
+dns-probe/dns-probe-linux-amd64
+dns-probe/dns-probe-linux-arm64
+
+# jitter-probe binaries
+jitter-probe/jitter-probe
+jitter-probe/jitter-probe-linux-amd64
+jitter-probe/jitter-probe-linux-arm64
+
+# gateway-monitor binaries
+gateway-monitor/gateway-monitor
+gateway-monitor/gateway-monitor-linux-amd64
+gateway-monitor/gateway-monitor-linux-arm64
