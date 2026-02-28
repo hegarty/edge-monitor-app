@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dns-probe
+  labels:
+    app: dns-probe
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dns-probe
+  template:
+    metadata:
+      labels:
+        app: dns-probe
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "9091"
+    spec:
+      containers:
+        - name: dns-probe
+          image: dns-probe:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 9091
+          {{- if .Values.env }}
+          env:
+            {{- range $key, $value := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          {{- end }}

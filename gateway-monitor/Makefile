@@ -9,6 +9,10 @@ FULL_IMAGE     := $(IMAGE_NAME):$(IMAGE_TAG)
 
 K3D_CLUSTER    ?= k3d-local
 
+REGISTRY       ?= localhost:5000
+CHART          := ./charts/$(APP_NAME)
+NAMESPACE      ?= gateway-monitor
+
 # Runtime env vars
 GATEWAY_IP       ?= 192.168.1.1
 WAN_TARGET       ?= 1.1.1.1
@@ -39,6 +43,16 @@ help:
 	@echo ""
 	@echo "k3d:"
 	@echo "  make push-k3d           Import image into k3d cluster"
+	@echo ""
+	@echo "Registry:"
+	@echo "  make push               Tag and push image to registry"
+	@echo ""
+	@echo "Helm deploy:"
+	@echo "  make deploy             Build, push, and deploy via Helm"
+	@echo "  make rollout            Wait for deployment rollout"
+	@echo "  make logs               Tail logs for deployed pods"
+	@echo "  make describe           Describe deployed pods"
+	@echo "  make delete             Uninstall Helm release and clean up"
 	@echo ""
 	@echo "Cleanup:"
 	@echo "  make clean"
@@ -108,6 +122,46 @@ build-image-all: build-image-amd64 build-image-arm64
 push-k3d: build-image
 	@echo ">> Importing image into k3d cluster $(K3D_CLUSTER)"
 	k3d image import $(FULL_IMAGE) -c $(K3D_CLUSTER)
+
+# ============================
+# Registry push
+# ============================
+
+.PHONY: push
+push: build-image
+	@echo ">> Tagging and pushing to registry $(REGISTRY)"
+	docker tag $(FULL_IMAGE) $(REGISTRY)/$(APP_NAME):$(IMAGE_TAG)
+	docker push $(REGISTRY)/$(APP_NAME):$(IMAGE_TAG)
+
+# ============================
+# Helm deploy
+# ============================
+
+.PHONY: deploy
+deploy: push
+	@echo ">> Deploying $(APP_NAME) via Helm"
+	helm upgrade --install $(APP_NAME) $(CHART) \
+	  --namespace $(NAMESPACE) \
+	  --set image.repository=k3d-edge-registry:5000/$(APP_NAME) \
+	  --set image.tag=$(IMAGE_TAG)
+
+.PHONY: rollout
+rollout:
+	@echo ">> Waiting for rollout of $(APP_NAME)"
+	kubectl rollout status deployment/$(APP_NAME) -n $(NAMESPACE)
+
+.PHONY: logs
+logs:
+	kubectl logs -l app=$(APP_NAME) -f -n $(NAMESPACE)
+
+.PHONY: describe
+describe:
+	kubectl describe pod -l app=$(APP_NAME) -n $(NAMESPACE)
+
+.PHONY: delete
+delete:
+	helm uninstall $(APP_NAME) -n $(NAMESPACE) || true
+	kubectl delete deployment,svc $(APP_NAME) -n $(NAMESPACE) || true
 
 # ============================
 # Cleanup
