@@ -29,6 +29,6 @@ metrics:
   port: 9093
 
 env:
-  GATEWAY_IP: "192.168.1.1"
+  GATEWAY_IP: "8.8.8.8"
   WAN_TARGET: "1.1.1.1"
   INTERVAL_SECONDS: "2"
