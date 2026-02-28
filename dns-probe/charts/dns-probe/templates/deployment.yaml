@@ -20,8 +20,8 @@ spec:
     spec:
       containers:
         - name: dns-probe
-          image: dns-probe:latest
-          imagePullPolicy: IfNotPresent
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - containerPort: 9091
           {{- if .Values.env }}

@@ -3,7 +3,7 @@ replicaCount: 1
 image:
   repository: k3d-edge-registry:5000/wifi-probe
   pullPolicy: Always
-  tag: "latest"
+  tag: "local"
 
 service:
   type: ClusterIP

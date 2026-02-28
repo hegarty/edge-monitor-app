@@ -20,8 +20,8 @@ spec:
     spec:
       containers:
         - name: gateway-monitor
-          image: gateway-monitor:latest
-          imagePullPolicy: IfNotPresent
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - containerPort: 9093
           {{- if .Values.env }}

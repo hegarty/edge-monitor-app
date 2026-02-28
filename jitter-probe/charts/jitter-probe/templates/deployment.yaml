@@ -20,8 +20,8 @@ spec:
     spec:
       containers:
         - name: jitter-probe
-          image: jitter-probe:latest
-          imagePullPolicy: IfNotPresent
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - containerPort: 9092
           {{- if .Values.env }}
