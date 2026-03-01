@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gateway-monitor
+spec:
+  ingressClassName: traefik
+  rules:
+    - http:
+        paths:
+          - path: /metrics
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway-monitor
+                port:
+                  number: 9093
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway-monitor
+                port:
+                  number: 9093

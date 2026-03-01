@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "wifi-probe.fullname" . }}
+  labels:
+    app: {{ include "wifi-probe.name" . }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: 9090
+      protocol: TCP
+      name: http
+  selector:
+    app: {{ include "wifi-probe.name" . }}

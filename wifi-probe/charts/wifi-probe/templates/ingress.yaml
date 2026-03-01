@@ -1,0 +1,27 @@
+{{- if .Values.ingress.enabled -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "wifi-probe.fullname" . }}
+  labels:
+    app: {{ include "wifi-probe.name" . }}
+  {{- with .Values.ingress.className }}
+  annotations:
+    kubernetes.io/ingress.class: {{ . }}
+  {{- end }}
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: {{ .Values.ingress.path }}
+            pathType: {{ .Values.ingress.pathType }}
+            backend:
+              service:
+                name: {{ include "wifi-probe.fullname" . }}
+                port:
+                  number: 9090
+{{- end }}

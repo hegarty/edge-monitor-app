@@ -1,0 +1,34 @@
+replicaCount: 1
+
+image:
+  repository: k3d-edge-registry:5000/gateway-monitor
+  pullPolicy: Always
+  tag: "local"
+
+service:
+  type: ClusterIP
+  port: 9093
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9093"
+    prometheus.io/path: "/metrics"
+
+ingress:
+  enabled: false
+  className: ""
+  host: edge.local
+  path: /
+  pathType: Prefix
+
+resources: {}
+
+podAnnotations: {}
+
+metrics:
+  enabled: true
+  port: 9093
+
+env:
+  GATEWAY_IP: "8.8.8.8"
+  WAN_TARGET: "1.1.1.1"
+  INTERVAL_SECONDS: "2"

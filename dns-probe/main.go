@@ -40,6 +40,14 @@ func main() {
 
 	dnsTargets := envList("DNS_TARGETS")
 
+	// Pre-initialize per-target series so zero-value counters appear in Prometheus
+	// before the first timeout event.
+	for _, domain := range dnsTargets {
+		probeUp.WithLabelValues(domain).Set(0)
+		probeLatency.WithLabelValues(domain).Set(0)
+		probeTimeouts.WithLabelValues(domain).Add(0)
+	}
+
 	slog.Info("starting dns-probe",
 		"dns_targets", dnsTargets,
 		"interval", interval.String(),
