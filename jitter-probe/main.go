@@ -73,6 +73,15 @@ func main() {
 		states[t] = &targetState{
 			window: NewWindow(windowSize),
 		}
+
+		// Pre-initialize per-target series so zero-value counters appear in Prometheus
+		// before the first loss or burst event.
+		networkLatency.WithLabelValues(t).Set(0)
+		networkJitter.WithLabelValues(t).Set(0)
+		packetLossTotal.WithLabelValues(t).Add(0)
+		packetLossBurstTotal.WithLabelValues(t).Add(0)
+		latencyP95.WithLabelValues(t).Set(0)
+		latencyP99.WithLabelValues(t).Set(0)
 	}
 
 	go func() {
