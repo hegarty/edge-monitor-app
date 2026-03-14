@@ -1,0 +1,25 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: alert-receiver
+spec:
+  ingressClassName: traefik
+  rules:
+    - http:
+        paths:
+          - path: /metrics
+            pathType: Prefix
+            backend:
+              service:
+                name: alert-receiver
+                port:
+                  number: 9094
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: alert-receiver
+                port:
+                  number: 9094
+{{- end }}

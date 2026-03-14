@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: alert-receiver
+  labels:
+    app: alert-receiver
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/path: "/metrics"
+    prometheus.io/port: "9094"
+spec:
+  type: ClusterIP
+  selector:
+    app: alert-receiver
+  ports:
+    - name: http
+      port: 9094
+      targetPort: 9094
+      protocol: TCP
