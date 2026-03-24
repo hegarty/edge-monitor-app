@@ -1,0 +1,130 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: edge-metrics
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: edge-metrics-remote-write
+  namespace: edge-metrics
+type: Opaque
+stringData:
+  REMOTE_WRITE_URL: "https://aps-workspaces.us-east-1.amazonaws.com/workspaces/ws-REPLACE_ME/api/v1/remote_write"
+  AWS_REGION: "us-east-1"
+  AWS_ACCESS_KEY_ID: "REPLACE_ME"
+  AWS_SECRET_ACCESS_KEY: "REPLACE_ME"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: edge-metrics-forwarder-config
+  namespace: edge-metrics
+data:
+  config.alloy: |
+    logging {
+      level  = "info"
+      format = "logfmt"
+    }
+
+    prometheus.remote_write "amp" {
+      external_labels = {
+        cluster = "pi-1"
+        source  = "edge-monitor-app"
+      }
+
+      endpoint {
+        url = sys.env("REMOTE_WRITE_URL")
+
+        sigv4 {
+          region     = sys.env("AWS_REGION")
+          access_key = sys.env("AWS_ACCESS_KEY_ID")
+          secret_key = sys.env("AWS_SECRET_ACCESS_KEY")
+        }
+      }
+
+      wal {
+        truncate_frequency = "30m"
+        min_keepalive_time = "2m"
+        max_keepalive_time = "30m"
+      }
+    }
+
+    prometheus.scrape "edge_monitor_apps" {
+      targets = [
+        {"__address__" = "wifi-probe.wifi-probe.svc.cluster.local:9090", "job" = "wifi-probe", "namespace" = "wifi-probe", "service" = "wifi-probe"},
+        {"__address__" = "dns-probe.dns-probe.svc.cluster.local:9091", "job" = "dns-probe", "namespace" = "dns-probe", "service" = "dns-probe"},
+        {"__address__" = "jitter-probe.jitter-probe.svc.cluster.local:9092", "job" = "jitter-probe", "namespace" = "jitter-probe", "service" = "jitter-probe"},
+        {"__address__" = "gateway-monitor.gateway-monitor.svc.cluster.local:9093", "job" = "gateway-monitor", "namespace" = "gateway-monitor", "service" = "gateway-monitor"},
+        {"__address__" = "alert-receiver.alert-receiver.svc.cluster.local:9094", "job" = "alert-receiver", "namespace" = "alert-receiver", "service" = "alert-receiver"},
+      ]
+
+      metrics_path    = "/metrics"
+      scrape_interval = "15s"
+      scrape_timeout  = "5s"
+      forward_to      = [prometheus.remote_write.amp.receiver]
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: edge-metrics-forwarder
+  namespace: edge-metrics
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: edge-metrics-forwarder
+  template:
+    metadata:
+      labels:
+        app: edge-metrics-forwarder
+    spec:
+      containers:
+        - name: alloy
+          image: grafana/alloy:v1.12.1
+          args:
+            - run
+            - --server.http.listen-addr=0.0.0.0:12345
+            - --storage.path=/var/lib/alloy/data
+            - --disable-reporting
+            - /etc/alloy/config.alloy
+          envFrom:
+            - secretRef:
+                name: edge-metrics-remote-write
+          ports:
+            - name: http
+              containerPort: 12345
+          resources:
+            requests:
+              cpu: 25m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alloy
+              readOnly: true
+            - name: data
+              mountPath: /var/lib/alloy/data
+      volumes:
+        - name: config
+          configMap:
+            name: edge-metrics-forwarder-config
+        - name: data
+          emptyDir:
+            sizeLimit: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: edge-metrics-forwarder
+  namespace: edge-metrics
+spec:
+  selector:
+    app: edge-metrics-forwarder
+  ports:
+    - name: http
+      port: 12345
+      targetPort: 12345

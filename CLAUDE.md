@@ -8,7 +8,7 @@ This repository contains application logic only. It does NOT contain Kubernetes 
 
 All cluster and infrastructure configuration lives in a separate repository:
 
-edge-monitor-infra
+edge-monitor-infra & k3s-cluster-raspberry-pi
 
 This project is intentionally minimal, edge-focused, and observability-driven. All AI-assisted edits must preserve simplicity, low resource usage, and Kubernetes-native design.
 
@@ -43,16 +43,19 @@ edge-monitor-app contains:
 - Dockerfiles
 - Makefiles (one per service)
 - Container build logic
+- Per-service Helm charts
 - Prometheus metric exposure
+- Optional app-scoped metrics forwarding examples for remote write from k3s
 
 edge-monitor-app does NOT contain:
 
 - k3d cluster definitions
-- Kubernetes manifests (unless strictly application-specific)
-- Helm charts
-- Terraform
+- cluster-level Kubernetes manifests
+- cluster-level Helm charts
+- Terragrunt/Terraform
 - Prometheus configuration
 - Alertmanager configuration
+- a full local Prometheus or Grafana platform deployment for the Raspberry Pi
 
 All infrastructure belongs in edge-monitor-infra.
 
@@ -219,10 +222,21 @@ make build-image-amd64  # Build Docker image for linux/amd64
 make build-image-arm64  # Build Docker image for linux/arm64
 make build-image-all    # Build Docker images for both architectures
 make push-k3d           # Import image into k3d cluster
+make push               # Tag and push image to REGISTRY
+make push-k3s           # Tag and push image to K3S_REGISTRY
+make deploy             # Deploy via Helm using k3d-oriented defaults
+make deploy-k3s         # Deploy via Helm using values-k3s.yaml
+make rollout            # Wait for deployment rollout
 make clean              # Remove built binaries
 ```
 
+For any Helm or `kubectl` target, `KUBE_CONTEXT` must be set explicitly. Do not rely on the current context.
+
 The Makefile should guide deployment, not replace Kubernetes configuration.
+
+Per-service Helm charts may expose metrics through ingress for scrape access, but ingress-controller installation and cluster networking remain outside this repository.
+
+For k3s-on-Pi, prefer a lightweight remote-write forwarder over a full local Prometheus plus Grafana stack when the goal is durable external retention.
 
 ---
 
@@ -250,8 +264,7 @@ Do not hardcode configuration values.
 ## 1. Repository Boundaries
 
 - No Terraform.
-- No Helm.
-- No Kubernetes manifests beyond minimal examples.
+- No cluster provisioning playbooks or node bootstrap scripts.
 - No cluster provisioning logic.
 
 Infrastructure lives in edge-monitor-infra.
@@ -284,7 +297,7 @@ Infrastructure lives in edge-monitor-infra.
 - Avoid high-cardinality labels.
 - Do not dynamically create unlimited label values.
 - Keep metric names stable.
-- Each service exposes metrics on its own port (9090–9093).
+- Each service exposes metrics on its own port (9090–9094).
 
 ## 6. Error Handling
 
@@ -315,6 +328,7 @@ Service ports:
 | dns-probe | 9091 |
 | jitter-probe | 9092 |
 | gateway-monitor | 9093 |
+| alert-receiver | 9094 |
 
 Logging:
 
@@ -348,6 +362,103 @@ Development should optimize for:
 - Not a router replacement.
 
 This is a lightweight, modular edge network observability suite.
+
+---
+
+# Deterministic Deployment Contract
+
+Every deployment run must be reproducible from explicit inputs.
+
+Canonical deployment service set and order:
+
+1. `wifi-probe`
+2. `dns-probe`
+3. `jitter-probe`
+4. `gateway-monitor`
+5. `alert-receiver`
+
+`hello-world` is not part of the production deployment contract.
+
+Determinism rules:
+
+- one `RELEASE_ID` per run across all services
+- explicit kube context in all `kubectl` and `helm` calls
+- immutable image tags for shared environments
+- target-specific Helm values profiles are mandatory
+- rollout and metrics checks required after every deploy run
+
+---
+
+# Release Identity Policy
+
+Use one release identifier for all images and chart deployments in a run:
+
+```bash
+export RELEASE_ID="$(date +%Y%m%d-%H%M)-$(git rev-parse --short HEAD)"
+```
+
+Policy:
+
+- reuse the same `RELEASE_ID` for all services in a given deployment
+- redeploying the same `RELEASE_ID` should produce the same intended state
+- avoid mutable tags such as `latest` outside local one-off experiments
+
+---
+
+# Target Profiles
+
+## k3d (local macOS cluster)
+
+- cluster: `k3d-local` (or explicitly supplied override)
+- image path: import local build with `make push-k3d`
+- chart values profile: `<service>/charts/<service>/values.yaml`
+- canonical execution plan: `plans/02-K3D-DEPLOYMENT.md`
+
+## k3s (Raspberry Pi cluster on LAN)
+
+- context: explicit (`pi-1.local` by default, from `~/.ssh/config` host `rpi-1`)
+- image path: push with `make push REGISTRY=<k3s-reachable-registry>`
+- chart values profile: `<service>/charts/<service>/values-k3s.yaml`
+- canonical execution plan: `plans/03-K3S-DEPLOYMENT.md`
+
+---
+
+# How To Operate This Repository
+
+Execute in this order:
+
+1. Read and follow `plans/00-START.md`
+2. Apply `plans/01-DEPLOYMENT-CONTRACT.md`
+3. Execute one target-specific plan (`plans/02-K3D-DEPLOYMENT.md` or `plans/03-K3S-DEPLOYMENT.md`)
+4. Run repository verification tests before completion
+
+When deployment behavior changes, update:
+
+- `AGENTS.md`
+- relevant `plans/*.md`
+- `tests/TESTS.md` and scripts
+
+---
+
+# Verification Workflow
+
+Default verification:
+
+```bash
+./tests/run-all.sh
+```
+
+Cluster-affecting changes:
+
+```bash
+RUN_CLUSTER_TESTS=1 ./tests/run-all.sh
+```
+
+Optional explicit context:
+
+```bash
+KUBE_CONTEXT=pi-1.local RUN_CLUSTER_TESTS=1 ./tests/run-all.sh
+```
 
 ---
 

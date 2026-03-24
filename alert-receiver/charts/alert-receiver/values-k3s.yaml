@@ -1,8 +1,8 @@
 replicaCount: 1
 
 image:
-  repository: k3d-edge-registry:5000/alert-receiver
-  pullPolicy: Always
+  repository: pi-1.local:5000/alert-receiver
+  pullPolicy: IfNotPresent
   tag: "local"
 
 service:
@@ -14,9 +14,9 @@ service:
     prometheus.io/path: "/metrics"
 
 ingress:
-  enabled: false
+  enabled: true
   className: traefik
-  host: alert-receiver.edge.local
+  host: alert-receiver.pi-1.local
   path: /metrics
   pathType: Prefix
 
@@ -29,7 +29,7 @@ metrics:
   port: 9094
 
 serviceMonitor:
-  enabled: false
+  enabled: true
   path: /metrics
   interval: 30s
   scrapeTimeout: 10s
@@ -40,7 +40,7 @@ secretName: alert-receiver-secrets
 
 env:
   PORT: "9094"
-  PROMETHEUS_URL: "http://host.k3d.internal:9090"
+  PROMETHEUS_URL: "http://prometheus-server.monitoring.svc.cluster.local:9090"
   PROMETHEUS_LOOKBACK: "30m"
   PROMETHEUS_TIMEOUT: "10s"
   LLM_TIMEOUT: "30s"

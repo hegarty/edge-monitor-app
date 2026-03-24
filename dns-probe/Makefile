@@ -9,8 +9,12 @@ FULL_IMAGE     := $(IMAGE_NAME):$(IMAGE_TAG)
 
 K3D_CLUSTER    ?= k3d-local
 REGISTRY       ?= localhost:5000
+K3S_REGISTRY   ?= pi-1.local:5000
+KUBE_CONTEXT   ?=
 CHART          := ./charts/$(APP_NAME)
 NAMESPACE      ?= dns-probe
+HELM_CONTEXT_ARG := $(if $(KUBE_CONTEXT),--kube-context $(KUBE_CONTEXT),)
+KUBECTL_CONTEXT_ARG := $(if $(KUBE_CONTEXT),--context $(KUBE_CONTEXT),)
 
 # Runtime env vars
 DNS_TARGETS    ?= google.com,cloudflare.com
@@ -47,6 +51,7 @@ help:
 	@echo ""
 	@echo "Helm deploy:"
 	@echo "  make deploy             Push image and deploy via Helm"
+	@echo "  make deploy-k3s         Build, push, and deploy to k3s via Helm values-k3s"
 	@echo "  make rollout            Wait for deployment rollout"
 	@echo "  make logs               Tail logs for running pods"
 	@echo "  make describe           Describe running pods"
@@ -130,35 +135,55 @@ push: build-image
 	docker tag $(FULL_IMAGE) $(REGISTRY)/$(APP_NAME):$(IMAGE_TAG)
 	docker push $(REGISTRY)/$(APP_NAME):$(IMAGE_TAG)
 
+.PHONY: push-k3s
+push-k3s: build-image
+	@echo ">> Tagging and pushing to k3s registry $(K3S_REGISTRY)"
+	docker tag $(FULL_IMAGE) $(K3S_REGISTRY)/$(APP_NAME):$(IMAGE_TAG)
+	docker push $(K3S_REGISTRY)/$(APP_NAME):$(IMAGE_TAG)
+
 # ============================
 # Helm deploy
 # ============================
 
+.PHONY: require-kube-context
+require-kube-context:
+	@test -n "$(KUBE_CONTEXT)" || (echo "KUBE_CONTEXT is required for Helm and kubectl targets" >&2; exit 1)
+
 .PHONY: deploy
-deploy: push
+deploy: push require-kube-context
 	@echo ">> Deploying $(APP_NAME) via Helm"
 	helm upgrade --install $(APP_NAME) $(CHART) \
+	  $(HELM_CONTEXT_ARG) \
 	  --namespace $(NAMESPACE) \
 	  --set image.repository=k3d-edge-registry:5000/$(APP_NAME) \
 	  --set image.tag=$(IMAGE_TAG)
 
+.PHONY: deploy-k3s
+deploy-k3s: push-k3s require-kube-context
+	@echo ">> Deploying $(APP_NAME) to k3s via Helm"
+	helm upgrade --install $(APP_NAME) $(CHART) \
+	  $(HELM_CONTEXT_ARG) \
+	  --namespace $(NAMESPACE) \
+	  -f $(CHART)/values-k3s.yaml \
+	  --set image.tag=$(IMAGE_TAG)
+
 .PHONY: rollout
-rollout:
+rollout: require-kube-context
 	@echo ">> Waiting for rollout of $(APP_NAME)"
-	kubectl rollout status deployment/$(APP_NAME) -n $(NAMESPACE)
+	kubectl $(KUBECTL_CONTEXT_ARG) rollout status deployment/$(APP_NAME) -n $(NAMESPACE)
 
 .PHONY: logs
-logs:
-	kubectl logs -l app=$(APP_NAME) -f -n $(NAMESPACE)
+logs: require-kube-context
+	kubectl $(KUBECTL_CONTEXT_ARG) logs -l app=$(APP_NAME) -f -n $(NAMESPACE)
 
 .PHONY: describe
-describe:
-	kubectl describe pod -l app=$(APP_NAME) -n $(NAMESPACE)
+describe: require-kube-context
+	kubectl $(KUBECTL_CONTEXT_ARG) describe pod -l app=$(APP_NAME) -n $(NAMESPACE)
 
 .PHONY: delete
-delete:
-	helm uninstall $(APP_NAME) -n $(NAMESPACE) || true
-	kubectl delete deployment,svc $(APP_NAME) -n $(NAMESPACE) || true
+delete: require-kube-context
+	helm uninstall $(APP_NAME) $(HELM_CONTEXT_ARG) -n $(NAMESPACE) || true
+	kubectl $(KUBECTL_CONTEXT_ARG) delete deployment,svc,ingress $(APP_NAME) -n $(NAMESPACE) || true
 
 # ============================
 # Cleanup
