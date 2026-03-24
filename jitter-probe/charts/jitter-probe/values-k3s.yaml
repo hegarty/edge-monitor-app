@@ -1,22 +1,22 @@
 replicaCount: 1
 
 image:
-  repository: k3d-edge-registry:5000/gateway-monitor
-  pullPolicy: Always
+  repository: pi-1.local:5000/jitter-probe
+  pullPolicy: IfNotPresent
   tag: "local"
 
 service:
   type: ClusterIP
-  port: 9093
+  port: 9092
   annotations:
     prometheus.io/scrape: "true"
-    prometheus.io/port: "9093"
+    prometheus.io/port: "9092"
     prometheus.io/path: "/metrics"
 
 ingress:
-  enabled: false
+  enabled: true
   className: traefik
-  host: gateway-monitor.edge.local
+  host: jitter-probe.pi-1.local
   path: /metrics
   pathType: Prefix
 
@@ -26,10 +26,10 @@ podAnnotations: {}
 
 metrics:
   enabled: true
-  port: 9093
+  port: 9092
 
 serviceMonitor:
-  enabled: false
+  enabled: true
   path: /metrics
   interval: 30s
   scrapeTimeout: 10s
@@ -37,6 +37,6 @@ serviceMonitor:
     release: prometheus
 
 env:
-  GATEWAY_IP: "8.8.8.8"
-  WAN_TARGET: "1.1.1.1"
-  INTERVAL_SECONDS: "2"
+  PING_TARGETS: "1.1.1.1,8.8.8.8"
+  SAMPLE_INTERVAL_MS: "500"
+  WINDOW_SIZE: "60"

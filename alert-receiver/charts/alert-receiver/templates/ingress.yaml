@@ -2,24 +2,20 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: alert-receiver
+  name: {{ include "alert-receiver.fullname" . }}
+  labels:
+    app: {{ include "alert-receiver.name" . }}
 spec:
-  ingressClassName: traefik
+  ingressClassName: {{ .Values.ingress.className }}
   rules:
-    - http:
+    - host: {{ .Values.ingress.host }}
+      http:
         paths:
-          - path: /metrics
-            pathType: Prefix
+          - path: {{ .Values.ingress.path }}
+            pathType: {{ .Values.ingress.pathType }}
             backend:
               service:
-                name: alert-receiver
+                name: {{ include "alert-receiver.fullname" . }}
                 port:
-                  number: 9094
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: alert-receiver
-                port:
-                  number: 9094
+                  number: {{ .Values.service.port }}
 {{- end }}

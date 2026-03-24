@@ -13,7 +13,7 @@ spec:
   selector:
     app: alert-receiver
   ports:
-    - name: http
+    - name: metrics
       port: 9094
       targetPort: 9094
       protocol: TCP

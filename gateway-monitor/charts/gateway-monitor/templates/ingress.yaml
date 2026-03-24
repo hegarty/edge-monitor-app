@@ -1,23 +1,21 @@
+{{- if .Values.ingress.enabled -}}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: gateway-monitor
+  name: {{ include "gateway-monitor.fullname" . }}
+  labels:
+    app: {{ include "gateway-monitor.name" . }}
 spec:
-  ingressClassName: traefik
+  ingressClassName: {{ .Values.ingress.className }}
   rules:
-    - http:
+    - host: {{ .Values.ingress.host }}
+      http:
         paths:
-          - path: /metrics
-            pathType: Prefix
+          - path: {{ .Values.ingress.path }}
+            pathType: {{ .Values.ingress.pathType }}
             backend:
               service:
-                name: gateway-monitor
+                name: {{ include "gateway-monitor.fullname" . }}
                 port:
-                  number: 9093
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: gateway-monitor
-                port:
-                  number: 9093
+                  number: {{ .Values.service.port }}
+{{- end }}

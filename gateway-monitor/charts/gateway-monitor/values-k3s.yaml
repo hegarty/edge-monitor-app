@@ -1,8 +1,8 @@
 replicaCount: 1
 
 image:
-  repository: k3d-edge-registry:5000/gateway-monitor
-  pullPolicy: Always
+  repository: pi-1.local:5000/gateway-monitor
+  pullPolicy: IfNotPresent
   tag: "local"
 
 service:
@@ -14,9 +14,9 @@ service:
     prometheus.io/path: "/metrics"
 
 ingress:
-  enabled: false
+  enabled: true
   className: traefik
-  host: gateway-monitor.edge.local
+  host: gateway-monitor.pi-1.local
   path: /metrics
   pathType: Prefix
 
@@ -29,7 +29,7 @@ metrics:
   port: 9093
 
 serviceMonitor:
-  enabled: false
+  enabled: true
   path: /metrics
   interval: 30s
   scrapeTimeout: 10s
