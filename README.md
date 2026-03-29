@@ -36,9 +36,9 @@ This system is built around concrete SLOs derived from real user experience. Met
 
 | Metric | Target | Window | Error condition |
 |--------|--------|--------|-----------------|
-| WAN reachability (`wan_reachable`) | 99.9% | 7 days | `wan_reachable == 0` |
+| WAN reachability (`wan_reachable`) | 99.998% | 30 days | `wan_reachable == 0` |
 
-**Error budget:** 99.9% over 7 days allows ~10 minutes of downtime per week. Breaching this budget is grounds for escalating with the ISP.
+**Error budget:** 99.998% over 30 days allows **60 seconds of downtime per month** (~43,200 minutes total). A single 1-minute outage exhausts the entire monthly budget. Breaching this budget is grounds for escalating with the ISP.
 
 ---
 
