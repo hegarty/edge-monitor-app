@@ -26,6 +26,66 @@ Four independent Go services run continuously, probing network reachability at h
 
 Each service is an independent Go binary with its own module, Dockerfile, and Makefile.
 
+## Service Level Objectives
+
+This system is built around concrete SLOs derived from real user experience. Metrics are only useful if they map to something that matters — these SLOs define what "good internet" means in this household.
+
+### Availability
+
+> Internet is reachable when you need it.
+
+| Metric | Target | Window | Error condition |
+|--------|--------|--------|-----------------|
+| WAN reachability (`wan_reachable`) | 99.9% | 7 days | `wan_reachable == 0` |
+
+**Error budget:** 99.9% over 7 days allows ~10 minutes of downtime per week. Breaching this budget is grounds for escalating with the ISP.
+
+---
+
+### Latency
+
+> Internet is fast enough for real-time use.
+
+| Metric | Target | Window |
+|--------|--------|--------|
+| p95 latency (`latency_p95`) | < 100ms | 15 minutes |
+
+---
+
+### Packet Loss
+
+> Connections don't break mid-stream.
+
+| Metric | Target | Window |
+|--------|--------|--------|
+| Loss rate (`packet_loss_total` / probes) | < 1% | 15 minutes |
+
+---
+
+### Stability
+
+> No jittery or spiky behavior disrupting video or real-time feeds.
+
+| Metric | Target |
+|--------|--------|
+| p99 latency (`latency_p99`) | < 250ms |
+
+This is the differentiating SLO. A link can be "up" and still feel broken if p99 spikes above 250ms repeatedly.
+
+---
+
+### Composite WiFi SLO (user-impact signal)
+
+A **bad experience** is defined as any of the following being true:
+
+- `wan_reachable == 0`
+- packet loss > 2% over a 15-minute window
+- `latency_p99 > 500ms`
+
+This composite condition is what drives alerting. Individual signals provide diagnosis; the composite signal measures whether the WiFi is actually usable.
+
+---
+
 ## Quick Start
 
 Run any service locally (requires Go 1.22+):
